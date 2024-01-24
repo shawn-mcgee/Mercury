@@ -1,4 +1,4 @@
-import { forEach, reduce } from "lodash"
+import { filter, forEach, reduce } from "lodash"
 import Clazz from "../util/Clazz"
 
 
@@ -30,14 +30,14 @@ export namespace Event {
   }
 
   export namespace Tree {
-    export function listen  <T>(tree: Event.Tree, type  : Clazz<T>, listener  : Event.Listener<T>, o ?: Event.Options) {
-      const a: Listen<T> = { action: LISTEN, type, listener, ...o }
+    export function listen  <T>(tree: Event.Tree, type  : Clazz<T>, callback  : Event.Callback<T>, o ?: Event.Options) {
+      const a: Listen<T> = { action: LISTEN, type, callback, ...o }
       if(o?.defer ?? true) _queue(tree, a)
       else                 _flush(tree, a)
     }
 
-    export function deafen  <T>(tree: Event.Tree, type ?: Clazz<T>, listener ?: Event.Listener<T>, o ?: Event.Options) {
-      const a: Deafen<T> = { action: DEAFEN, type, listener, ...o }
+    export function deafen  <T>(tree: Event.Tree, type ?: Clazz<T>, callback ?: Event.Callback<T>, o ?: Event.Options) {
+      const a: Deafen<T> = { action: DEAFEN, type, callback, ...o }
       if(o?.defer ?? true) _queue(tree, a)
       else                 _flush(tree, a)
     }
@@ -81,30 +81,76 @@ export namespace Event {
     function _request(tree: Event.Tree, path ?: Event.Path, root = tree._root) {
       if(!path) return root
 
-      
+      for(const name of Event.walk(path)) {
+        const node = root._children.get(name)
+        if(!node) return
+        root = node
+      }
 
-      
-
+      return root
     }
 
     function _require(tree: Event.Tree, path ?: Event.Path, root = tree._root) {
       if(!path) return root
+
+      for(const name of Event.walk(path)) {
+        let node = root._children.get(name)
+        if(!node) {
+          node     =     Event.Node(root)
+          root._children.set(name , node)
+        }
+        root = node
+      }
+
+      return root
+    }
+
+    function _listeners<T>(node: Event.Node, type ?: Clazz<T>) {
+      return filter(node._listeners, ({type, self}) => {
+        
+      })
     }
   }
 
-  export function Node(): Event.Node {
-    
+  export function Node(_parent ?: Event.Node): Event.Node {
+    return {
+      _parent,
+      _children : new Map(),
+      _listeners: new Set()
+    }
   }
 
   export interface Node {
-    _from ?:             Event.Node
-    _join ?: Map<string, Event.Node>
-
-
+    _parent ?:              Event.Node
+    _children : Map<string, Event.Node>
+    _listeners: Set<Listener<any>>
   }
 
   export namespace Node {
 
+  }
+
+  export type Callback<T> = (event: T, context: Event.Context<T>)  =>  void
+
+  export function Listener<T>() {
+
+  }
+
+  export interface Listener<T> {
+    type: Clazz<T>
+    callback: Event.Callback<T>
+  }
+
+  export namespace Listener    {
+
+  }
+
+  export function isCallback<T>(a: Event.Callback<T> | Event.Listener<T>): a is Callback<T> {
+    return typeof a === "function"
+  }
+
+  export function isListener<T>(a: Event.Callback<T> | Event.Listener<T>): a is Listener<T> {
+    return typeof a === "object"
   }
 
   export type Path = string | Iterable<Path>
@@ -113,23 +159,18 @@ export namespace Event {
   export interface Context<T> {
     tree: Event.Tree
     path: Event.Path
-    type: Clazz<T>
     self: Event.Listener<T>
   }
-
-  export type Listener<T> = (event: T, context: Event.Context<T>) => void
 
   const LISTEN   = Symbol()
   const DEAFEN   = Symbol()
   const DISPATCH = Symbol()
 
-  interface Listen  <T> extends Event.Options{ action: typeof LISTEN, type  : Clazz<T>, listener  : Event.Listener<T> }
-  interface Deafen  <T> extends Event.Options{ action: typeof DEAFEN, type ?: Clazz<T>, listener ?: Event.Listener<T> }
+  interface Listen  <T> extends Event.Options{ action: typeof LISTEN, type  : Clazz<T>, callback  : Event.Callback<T> }
+  interface Deafen  <T> extends Event.Options{ action: typeof DEAFEN, type ?: Clazz<T>, callback ?: Event.Callback<T> }
   interface Dispatch<T> extends Event.Options{ action: typeof DISPATCH, event: T }
 
   type Action<T> = Listen<T> | Deafen<T> | Dispatch<T>
-
-  type Listening<T> = { type: Clazz<T>, self: Event.Listener<T> }
 }
 
 export default Event
